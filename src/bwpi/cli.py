@@ -5,102 +5,203 @@ import sys
 from pathlib import Path
 
 
-def run_pi():
-    cwd = Path.cwd()
-    home = Path.home()
-    pi_config = home / ".pi"
+BWRAP_ARGS = [
+    "--unshare-all",
+    "--share-net",
+    "--new-session",
+    "--die-with-parent",
 
-    if shutil.which("bwrap") is None:
-        raise RuntimeError(
-            "bubblewrap (bwrap) not found in PATH"
-        )
+    "--ro-bind", "/", "/",
 
-    if not shutil.which("pi"):
-        raise RuntimeError(
-            "command 'pi' not found in PATH"
-        )
+    "--proc", "/proc",
+    "--dev", "/dev",
+    "--tmpfs", "/tmp",
+]
 
+
+def require_command(name: str):
+    if shutil.which(name) is None:
+        raise RuntimeError(f"command '{name}' not found")
+
+
+def run_command(cmd, **kwargs):
+    return subprocess.check_output(
+        cmd,
+        text=True,
+        **kwargs,
+    ).strip()
+
+
+def wsl_exec(wsl: str, command: str):
+    return run_command(
+        [
+            wsl,
+            "bash",
+            "-ic",
+            command,
+        ]
+    )
+
+
+def add_pi_config(cmd, pi_config: str):
+    if Path(pi_config).exists():
+        cmd.extend([
+            "--bind",
+            pi_config,
+            pi_config,
+        ])
+
+
+def build_bwrap_command(
+    cwd: str,
+    pi_path: str,
+    pi_config: str | None = None,
+    path: str | None = None,
+):
     cmd = [
         "bwrap",
-
-        # Namespace isolation:
-        #
-        # --unshare-all
-        #   creates separate Linux namespaces:
-        #   mount, PID, IPC, UTS, user and network
-        #
-        # --share-net
-        #   keeps the host network.
-        #   Without this pi would have no internet access.
-        #
-        # --new-session
-        #   creates a new terminal session.
-        #
-        # --die-with-parent
-        #   closes the sandbox when the parent process terminates.
-        "--unshare-all",
-        "--share-net",
-        "--new-session",
-        "--die-with-parent",
-
-        # Filesystem:
-        #
-        # exposes the whole host filesystem read-only.
-        # Writable directories are added afterwards
-        # with --bind.
-        "--ro-bind", "/", "/",
-
-        # Virtual mounts needed by Linux programs.
-        #
-        # /proc:
-        #   process information.
-        #
-        # /dev:
-        #   system devices (tty, null, random...).
-        #
-        # /tmp:
-        #   isolated temporary directory.
-        "--proc", "/proc",
-        "--dev", "/dev",
-        "--tmpfs", "/tmp",
-
-        # Working directory:
-        #
-        # makes the current directory writable.
-        "--bind", str(cwd), str(cwd),
-
-        # Initial working directory
-        "--chdir", str(cwd),
+        *BWRAP_ARGS,
     ]
 
-    # Pi user configuration.
-    # Shared only if it exists, otherwise the command would fail.
-    if pi_config.exists():
-        cmd.extend(["--bind", str(pi_config), str(pi_config),])
+    if path:
+        cmd.extend([
+            "--setenv",
+            "PATH",
+            path,
+        ])
 
-    # Run Pi inside Bubblewrap
-    cmd.append("pi")
+    cmd.extend([
+        "--bind",
+        cwd,
+        cwd,
 
-    # Add any extra arguments passed via CLI
+        "--chdir",
+        cwd,
+    ])
+
+    if pi_config:
+        add_pi_config(cmd, pi_config)
+
+    cmd.append(pi_path)
+
     cmd.extend(sys.argv[1:])
 
-    # Keep the current environment.
-    # Automatically passes PATH, API key, proxy, locale and other configurations.
-    env = os.environ.copy()
+    return cmd
 
-    # HOME is normalized to avoid weird environment configurations
+
+def run_pi_linux():
+    require_command("bwrap")
+    require_command("pi")
+
+    cwd = str(Path.cwd())
+    home = Path.home()
+
+    cmd = build_bwrap_command(
+        cwd=cwd,
+        pi_path="pi",
+        pi_config=str(home / ".pi"),
+    )
+
+    env = os.environ.copy()
     env["HOME"] = str(home)
 
-    result = subprocess.call(
+    return subprocess.call(
         cmd,
         env=env,
     )
 
-    sys.exit(result)
+
+def windows_path_to_wsl(path: Path):
+    drive = path.drive.rstrip(":").lower()
+    rest = str(path)[2:].replace("\\", "/")
+
+    return f"/mnt/{drive}{rest}"
+
+
+def get_wsl_environment(wsl: str):
+    pi_path = wsl_exec(
+        wsl,
+        "command -v pi",
+    )
+
+    if not pi_path:
+        raise RuntimeError(
+            "Cannot find pi inside WSL"
+        )
+
+    node_path = wsl_exec(
+        wsl,
+        "command -v node",
+    )
+
+    if not node_path:
+        raise RuntimeError(
+            "Cannot find node inside WSL"
+        )
+
+    node_bin = node_path.rsplit("/", 1)[0]
+
+    path = wsl_exec(
+        wsl,
+        'printf "%s" "$PATH"',
+    )
+
+    if node_bin not in path.split(":"):
+        path = f"{node_bin}:{path}"
+
+    home = wsl_exec(
+        wsl,
+        'printf "%s" "$HOME"',
+    )
+
+    return {
+        "pi": pi_path,
+        "home": home,
+        "path": path,
+    }
+
+
+def run_pi_windows():
+    wsl = shutil.which("wsl")
+
+    if wsl is None:
+        raise RuntimeError(
+            "WSL not found"
+        )
+
+    env = get_wsl_environment(wsl)
+
+    cwd = windows_path_to_wsl(
+        Path.cwd()
+    )
+
+    pi_config = f"{env['home']}/.pi"
+
+    cmd = [
+        wsl,
+        "--cd",
+        cwd,
+        "-e",
+        *build_bwrap_command(
+            cwd=cwd,
+            pi_path=env["pi"],
+            pi_config=pi_config,
+            path=env["path"],
+        ),
+    ]
+
+    return subprocess.call(cmd)
+
+
+def run_pi():
+    if sys.platform == "win32":
+        return run_pi_windows()
+
+    return run_pi_linux()
 
 
 def main():
-    run_pi()
+    sys.exit(run_pi())
 
 
 if __name__ == "__main__":

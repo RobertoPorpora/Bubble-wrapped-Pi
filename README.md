@@ -1,31 +1,91 @@
 # bwpi - Bubblewrapped PI
 
-`bwpi` runs the `pi` command inside an isolated environment using
+`bwpi` runs the `pi` agent inside an isolated environment using
 [bubblewrap](https://github.com/containers/bubblewrap).
 
 The goal is to provide a lightweight sandbox for `pi` while keeping:
+
 - network access;
 - the current project directory writable;
-- the user configuration `~/.pi`;
-- the current shell environment.
+- the user configuration `~/.pi`.
 
 The system filesystem is mounted read-only to reduce the chance of
 accidental modifications.
 
 ## Requirements
 
-- Linux
+### Linux
+
 - Python >= 3.10
 - bubblewrap (`bwrap`)
-- the `pi` command available in the PATH
+- `pi` installed and available in PATH
 
-Installing bubblewrap:
+### Windows
+
+On Windows, `bwpi` uses **WSL2** because bubblewrap requires a Linux
+environment.
+
+The expected setup is:
+
+```
+Windows
+└── WSL2
+    ├── bubblewrap
+    └── Node.js
+        └── pi
+````
+
+`bwpi` automatically:
+
+- converts the Windows working directory into a WSL path;
+- finds `pi` inside WSL;
+- finds the Node.js installation used by `pi`;
+- configures the sandbox PATH;
+- shares the WSL `~/.pi` configuration.
+
+The Windows installation of Node.js or Pi is not used.
+
+---
+
+## Installing WSL2 on Windows
+
+Open PowerShell as Administrator:
+
+```powershell
+wsl --install
+````
+
+Restart Windows if requested.
+
+After reboot, open the installed Linux distribution
+(Ubuntu is recommended) and create your Linux user.
+
+Verify WSL2:
+
+```powershell
+wsl --status
+```
+
+---
+
+## Installing dependencies inside WSL
+
+Open your WSL terminal.
+
+Update packages:
+
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
+
+### Install bubblewrap
 
 Debian/Ubuntu:
 
 ```bash
 sudo apt install bubblewrap
-````
+```
 
 Fedora:
 
@@ -38,6 +98,60 @@ Arch:
 ```bash
 sudo pacman -S bubblewrap
 ```
+
+Verify:
+
+```bash
+bwrap --version
+```
+
+---
+
+## Install Node.js inside WSL
+
+The recommended method is `nvm`.
+
+Install nvm:
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
+```
+
+Reload your shell:
+
+```bash
+source ~/.bashrc
+```
+
+Install Node.js:
+
+```bash
+nvm install node
+```
+
+Verify:
+
+```bash
+node --version
+```
+
+---
+
+## Install Pi inside WSL
+
+Install Pi using npm:
+
+```bash
+npm install -g pi
+```
+
+Verify:
+
+```bash
+pi --version
+```
+
+---
 
 ## Installation
 
@@ -54,17 +168,21 @@ Install the package:
 pip install .
 ```
 
-To install it in development mode:
+For development:
 
 ```bash
 pip install -e .
 ```
 
-After installation the following will be available:
+After installation:
 
 ```bash
 bwpi
 ```
+
+will be available.
+
+---
 
 ## Usage
 
@@ -74,13 +192,15 @@ Enter the project directory:
 cd my-project
 ```
 
-Start pi:
+Start Pi:
 
 ```bash
 bwpi
 ```
 
-The command will run inside the sandbox.
+The command will run inside the bubblewrap sandbox.
+
+---
 
 ## What gets isolated
 
@@ -88,10 +208,10 @@ The command will run inside the sandbox.
 
 ### Linux namespaces
 
-* isolated PID
-* isolated mounts
-* isolated IPC
-* isolated UTS
+* isolated PID namespace
+* isolated mount namespace
+* isolated IPC namespace
+* isolated UTS namespace
 * isolated user namespace
 
 ### Filesystem
@@ -104,7 +224,7 @@ The main filesystem is mounted:
 
 read-only.
 
-The following are writable:
+Writable locations:
 
 ```
 current directory
@@ -112,50 +232,62 @@ current directory
 /tmp
 ```
 
+The current project directory is mounted back as writable so Pi can
+modify project files.
+
 ### Network
 
-The network is kept via:
+The network is kept available:
 
 ```
 --share-net
 ```
 
-so `pi` can continue to access online services.
+so Pi can continue to access online services.
+
+---
 
 ## Environment variables
 
-`bwpi` automatically inherits the shell environment:
+`bwpi` preserves the required environment for running Pi.
 
-* PATH
-* API key
-* proxy
-* local configurations
-* personal variables
+Inside the sandbox:
 
-The variable:
+* `PATH` is configured so Node.js installed through `nvm` is available;
+* Pi configuration is shared;
+* `HOME` points to the user home directory.
 
-```
-HOME
-```
+The sandbox does not use the Windows Node.js installation.
 
-is automatically set to the home of the current user.
+---
 
 ## Debug
 
-To see the generated bubblewrap command:
+To inspect the generated bubblewrap command:
 
-temporarily edit `cli.py` adding:
+temporarily add:
 
 ```python
 print(" ".join(cmd))
 ```
 
-before running `subprocess.call`.
+before:
+
+```python
+subprocess.call(cmd)
+```
+
+in `cli.py`.
+
+---
 
 ## Limitations
 
 This is not a full container.
 
 Bubblewrap provides isolation through Linux namespaces,
-but the level of security depends on the kernel configuration
+but the level of protection depends on the kernel configuration
 and the user's permissions.
+
+On Windows, the isolation boundary is provided by WSL2 plus
+bubblewrap.
