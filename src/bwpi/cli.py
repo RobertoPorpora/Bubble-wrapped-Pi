@@ -42,22 +42,46 @@ def wsl_exec(wsl: str, command: str):
         ]
     )
 
+def wsl_path_exists(wsl: str, path: str) -> bool:
+    return (
+        subprocess.call(
+            [
+                wsl,
+                "bash",
+                "-lc",
+                f'test -e "{path}"',
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        == 0
+    )
 
-def add_pi_config(cmd, pi_config: str):
-    if Path(pi_config).exists():
+def add_pi_config(
+    cmd,
+    pi_config: str,
+    wsl: str | None = None,
+):
+    if wsl is None:
+        exists = Path(pi_config).exists()
+    else:
+        exists = wsl_path_exists(wsl, pi_config)
+
+    if exists:
         cmd.extend([
             "--bind",
             pi_config,
             pi_config,
         ])
 
-
 def build_bwrap_command(
     cwd: str,
     pi_path: str,
     pi_config: str | None = None,
     path: str | None = None,
+    wsl: str | None = None,
 ):
+    
     cmd = [
         "bwrap",
         *BWRAP_ARGS,
@@ -69,23 +93,35 @@ def build_bwrap_command(
             "PATH",
             path,
         ])
-
+    
     cmd.extend([
         "--bind",
         cwd,
         cwd,
+    ])
 
+    host_git = Path.cwd() / ".git"
+    
+    if host_git.is_dir():
+        cmd.extend([
+            "--ro-bind",
+            f"{cwd}/.git",
+            f"{cwd}/.git",
+        ])
+
+
+    cmd.extend([
         "--chdir",
         cwd,
     ])
 
     if pi_config:
-        add_pi_config(cmd, pi_config)
+        add_pi_config(cmd, pi_config, wsl)
 
     cmd.append(pi_path)
 
     cmd.extend(sys.argv[1:])
-
+    
     return cmd
 
 
@@ -187,9 +223,10 @@ def run_pi_windows():
             pi_path=env["pi"],
             pi_config=pi_config,
             path=env["path"],
+            wsl=wsl,
         ),
     ]
-
+    
     return subprocess.call(cmd)
 
 
