@@ -10,7 +10,13 @@ The goal is to provide a lightweight sandbox for `pi` while keeping:
 - the user configuration `~/.pi`.
 
 The system filesystem is mounted read-only to reduce the chance of
-accidental modifications.
+accidental modifications. By default, the project's `.git` directory is
+also mounted read-only to prevent Git operations from modifying the
+repository metadata.
+
+Pass `--git-unlock` to mount the `.git` directory as writable, allowing
+Pi to perform Git operations such as creating commits, switching
+branches, or updating references.
 
 ## Requirements
 
@@ -200,6 +206,16 @@ bwpi
 
 The command will run inside the bubblewrap sandbox.
 
+To allow Pi to perform Git operations, run:
+
+```bash
+bwpi --git-unlock
+```
+
+When this option is specified, the project's .git directory is mounted
+read-write. Without it, .git remains read-only while the rest of the
+project directory is still writable.
+
 ---
 
 ## What gets isolated
@@ -234,6 +250,12 @@ current directory
 
 The current project directory is mounted back as writable so Pi can
 modify project files.
+
+By default, the project's `.git` directory remains mounted read-only,
+preventing Git metadata from being modified.
+
+Passing `--git-unlock` mounts `.git` as read-write,
+enabling Pi to perform Git operations.
 
 ### Network
 

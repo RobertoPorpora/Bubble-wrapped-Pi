@@ -18,6 +18,17 @@ BWRAP_ARGS = [
     "--tmpfs", "/tmp",
 ]
 
+def parse_wrapper_args():
+    git_unlock = False
+    forwarded = []
+
+    for arg in sys.argv[1:]:
+        if arg == "--git-unlock":
+            git_unlock = True
+        else:
+            forwarded.append(arg)
+
+    return git_unlock, forwarded
 
 def require_command(name: str):
     if shutil.which(name) is None:
@@ -80,6 +91,8 @@ def build_bwrap_command(
     pi_config: str | None = None,
     path: str | None = None,
     wsl: str | None = None,
+    git_unlock: bool = False,
+    pi_args: list[str] | None = None,
 ):
     
     cmd = [
@@ -100,14 +113,14 @@ def build_bwrap_command(
         cwd,
     ])
 
-    host_git = Path.cwd() / ".git"
-    
-    if host_git.is_dir():
-        cmd.extend([
-            "--ro-bind",
-            f"{cwd}/.git",
-            f"{cwd}/.git",
-        ])
+    if not git_unlock:
+        host_git = Path.cwd() / ".git"
+        if host_git.is_dir():
+            cmd.extend([
+                "--ro-bind",
+                f"{cwd}/.git",
+                f"{cwd}/.git",
+            ])
 
 
     cmd.extend([
@@ -120,7 +133,8 @@ def build_bwrap_command(
 
     cmd.append(pi_path)
 
-    cmd.extend(sys.argv[1:])
+    if pi_args:
+        cmd.extend(pi_args)
     
     return cmd
 
@@ -132,10 +146,14 @@ def run_pi_linux():
     cwd = str(Path.cwd())
     home = Path.home()
 
+    git_unlock, pi_args = parse_wrapper_args()
+
     cmd = build_bwrap_command(
         cwd=cwd,
         pi_path="pi",
         pi_config=str(home / ".pi"),
+        git_unlock=git_unlock,
+        pi_args=pi_args,
     )
 
     env = os.environ.copy()
@@ -213,6 +231,8 @@ def run_pi_windows():
 
     pi_config = f"{env['home']}/.pi"
 
+    git_unlock, pi_args = parse_wrapper_args()
+
     cmd = [
         wsl,
         "--cd",
@@ -224,6 +244,8 @@ def run_pi_windows():
             pi_config=pi_config,
             path=env["path"],
             wsl=wsl,
+            git_unlock=git_unlock,
+            pi_args=pi_args,
         ),
     ]
     
