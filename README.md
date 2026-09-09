@@ -22,171 +22,215 @@ branches, or updating references.
 
 ### Linux
 
-- Python >= 3.10
+- Python 3.10 or newer
 - bubblewrap (`bwrap`)
-- `pi` installed and available in PATH
+- Node.js and `pi` in `PATH`
 
 ### Windows
 
-On Windows, `bwpi` uses **WSL2** because bubblewrap requires a Linux
-environment.
+- Windows 10 version 2004, build 19041, or newer
+- Python 3.10 or newer on Windows
+- WSL2 with bubblewrap, Node.js, and `pi` installed in its default Linux
+  distribution
 
-The expected setup is:
+Windows Node.js and Pi installations are not used. `bwpi` runs their WSL
+versions and shares WSL's `~/.pi` configuration.
 
-```
-Windows
-└── WSL2
-    ├── bubblewrap
-    └── Node.js
-        └── pi
-````
+## Install on Windows
 
-`bwpi` automatically:
+Windows commands below work in PowerShell or Command Prompt. Do not install
+`bwpi` inside WSL.
 
-- converts the Windows working directory into a WSL path;
-- finds `pi` inside WSL;
-- finds the Node.js installation used by `pi`;
-- configures the sandbox PATH;
-- shares the WSL `~/.pi` configuration.
+### 1. Check WSL
 
-The Windows installation of Node.js or Pi is not used.
+In PowerShell or Command Prompt:
 
----
-
-## Installing WSL2 on Windows
-
-Open PowerShell as Administrator:
-
-```powershell
-wsl --install
-````
-
-Restart Windows if requested.
-
-After reboot, open the installed Linux distribution
-(Ubuntu is recommended) and create your Linux user.
-
-Verify WSL2:
-
-```powershell
+```console
 wsl --status
 ```
 
----
+If Windows cannot find `wsl`, or reports that WSL is not installed, open an
+Administrator PowerShell or Command Prompt window and run:
 
-## Installing dependencies inside WSL
+```console
+wsl --install
+```
 
-Open your WSL terminal.
+Restart Windows if requested. This command normally installs Ubuntu too.
 
-Update packages:
+### 2. Check Linux distribution
+
+In PowerShell or Command Prompt:
+
+```console
+wsl --list --verbose
+```
+
+If no distribution appears, install Ubuntu:
+
+```console
+wsl --install --distribution Ubuntu
+```
+
+Launch Ubuntu once and create Linux username and password:
+
+```console
+wsl --distribution Ubuntu
+```
+
+The `VERSION` column from `wsl --list --verbose` must show `2`. If Ubuntu
+uses WSL 1, convert it in PowerShell or Command Prompt:
+
+```console
+wsl --set-version Ubuntu 2
+```
+
+`bwpi` uses WSL's default distribution. Make Ubuntu default:
+
+```console
+wsl --set-default Ubuntu
+```
+
+If displayed distribution name differs from `Ubuntu`, use displayed name in
+both commands.
+
+### 3. Install WSL dependencies
+
+Open Ubuntu, or run `wsl` from PowerShell or Command Prompt. Commands in
+this section run **inside WSL**.
+
+Install bubblewrap and curl:
 
 ```bash
 sudo apt update
-sudo apt upgrade -y
+sudo apt install -y bubblewrap curl
 ```
 
-### Install bubblewrap
-
-Debian/Ubuntu:
+Install [nvm](https://github.com/nvm-sh/nvm), then load it:
 
 ```bash
-sudo apt install bubblewrap
-```
-
-Fedora:
-
-```bash
-sudo dnf install bubblewrap
-```
-
-Arch:
-
-```bash
-sudo pacman -S bubblewrap
-```
-
-Verify:
-
-```bash
-bwrap --version
-```
-
----
-
-## Install Node.js inside WSL
-
-The recommended method is `nvm`.
-
-Install nvm:
-
-```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash
-```
-
-Reload your shell:
-
-```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.7/install.sh | bash
 source ~/.bashrc
 ```
 
-Install Node.js:
+Install latest Node.js LTS release:
 
 ```bash
-nvm install node
+nvm install --lts
 ```
 
-Verify:
+Install Pi:
 
 ```bash
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+```
+
+Create configuration directory and verify dependencies:
+
+```bash
+mkdir -p ~/.pi
+bwrap --version
 node --version
-```
-
----
-
-## Install Pi inside WSL
-
-Install Pi using npm:
-
-```bash
-npm install -g pi
-```
-
-Verify:
-
-```bash
 pi --version
 ```
 
----
+Return to Windows shell with `exit`.
 
-## Installation
+### 4. Install bwpi on Windows
 
-Clone the repository:
+Commands in this section run in PowerShell or Command Prompt, not WSL.
 
-```bash
-git clone <repository-url>
+#### With uv (recommended)
+
+Install with `uv` (recommended). It creates an isolated environment and puts
+`bwpi` on `PATH`:
+
+```console
+winget install --exact --id Astral.uv
+git clone https://github.com/RobertoPorpora/Bubble-wrapped-Pi.git bwpi
 cd bwpi
+uv tool install .
 ```
 
-Install the package:
+For editable development install, use `uv tool install --editable .`.
+
+#### With Python + Pip
+
+Without `uv`, install with Python and pip instead:
+
+Check Windows Python and Git first:
+
+```console
+py --version
+git --version
+```
+
+If either command is missing, install it with `winget`, then reopen terminal:
+
+```console
+winget install --exact --id Python.Python.3.12
+winget install --exact --id Git.Git
+```
+
+
+```console
+git clone https://github.com/RobertoPorpora/Bubble-wrapped-Pi.git bwpi
+cd bwpi
+py -m pip install .
+```
+
+For editable development install, use `py -m pip install -e .` instead.
+
+Verify from project to sandbox:
+
+```console
+cd path\to\your-project
+bwpi --version
+```
+
+## Install on Linux
+
+Install Python 3.10 or newer, bubblewrap, curl, and Git with distribution's
+package manager. For Debian or Ubuntu:
 
 ```bash
-pip install .
+sudo apt update
+sudo apt install -y bubblewrap curl git python3 python3-pip
 ```
 
-For development:
+Install nvm, Node.js LTS, and Pi as current user:
 
 ```bash
-pip install -e .
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.7/install.sh | bash
+source ~/.bashrc
+nvm install --lts
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+mkdir -p ~/.pi
 ```
 
-After installation:
+Install `uv` (recommended), then clone and install `bwpi`:
 
 ```bash
-bwpi
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source "$HOME/.local/bin/env"
+git clone https://github.com/RobertoPorpora/Bubble-wrapped-Pi.git bwpi
+cd bwpi
+uv tool install .
 ```
 
-will be available.
+For editable development install, use `uv tool install --editable .`.
+
+Without `uv`, install with Python and pip instead:
+
+```bash
+git clone https://github.com/RobertoPorpora/Bubble-wrapped-Pi.git bwpi
+cd bwpi
+python3 -m pip install .
+```
+
+Some distributions block system-wide `pip` installs. In that case, use a
+virtual environment or `pipx`. For editable development install, use
+`python3 -m pip install -e .` instead.
 
 ---
 
@@ -312,4 +356,11 @@ but the level of protection depends on the kernel configuration
 and the user's permissions.
 
 On Windows, the isolation boundary is provided by WSL2 plus
-bubblewrap.
+bubblewrap. WSL interoperability currently lets sandboxed processes launch
+Windows executables outside bubblewrap restrictions. Do not treat Windows
+mode as strong containment until WSL interoperability is disabled.
+
+## To do
+
+- Disable WSL interoperability
+- Make `.git` directories in subfolders read-only
