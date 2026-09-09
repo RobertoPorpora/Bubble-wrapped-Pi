@@ -140,6 +140,97 @@ Return to Windows shell with `exit`.
 
 Commands in this section run in PowerShell or Command Prompt, not WSL.
 
+### 5. Disable Windows executables from WSL
+
+By default, WSL can launch Windows executables.
+
+This is a problem because Windows processes started from WSL are **not constrained by Bubblewrap**. They can therefore modify files and settings outside the sandbox.
+
+For this setup, disabling Windows executable interoperability is strongly recommended. Otherwise, a sandboxed agent could simply invoke a Windows program and bypass much of the protection.
+
+First, open WSL:
+
+```bash
+wsl
+```
+
+Then open `/etc/wsl.conf` in a text editor:
+
+```bash
+sudo nano /etc/wsl.conf
+```
+
+Add the following:
+
+```ini
+[interop]
+enabled=false
+```
+
+You can also prevent WSL from automatically adding Windows directories to `PATH`:
+
+```ini
+[interop]
+enabled=false
+appendWindowsPath=false
+```
+
+Whether to disable access to Windows files entirely is a separate choice. Allowing the agent to read parts of the Windows filesystem can be useful for debugging, while restricting access provides stronger isolation.
+
+Save and exit Nano:
+
+```text
+Ctrl+X
+Y
+Enter
+```
+
+Then exit WSL:
+
+```bash
+exit
+```
+
+From Windows, shut down the WSL VM so the configuration is reloaded:
+
+```powershell
+wsl --shutdown
+```
+
+You can verify that Windows executable interoperability is disabled with:
+
+```bash
+wsl
+notepad.exe
+```
+
+If `notepad.exe` does not start, the setting is active.
+
+### 6. Tell the agent about the sandbox
+
+It is also useful to describe the sandbox constraints in the agent's system prompt.
+
+This prevents the agent from wasting time trying to modify read-only files, launch Windows applications, or find ways around restrictions that cannot be changed from inside the sandbox.
+
+For example:
+
+```text
+You are running inside a sandbox with the following restrictions:
+
+- <cwd> is mounted read/write.
+- <cwd>/.git is mounted read-only.
+- The rest of the system is mounted read-only.
+- Windows executables are disabled.
+
+These restrictions are enforced by the environment. Do not attempt to bypass them.
+
+Do not ask the user for permission to bypass the sandbox; the sandbox cannot be disabled from within the agent session.
+
+If you need a system-level change that is blocked by the sandbox, explain exactly what needs to be changed and ask the user to perform that change outside the sandbox.
+```
+
+
+
 #### With uv (recommended)
 
 Install with `uv` (recommended). It creates an isolated environment and puts
